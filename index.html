@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>我的游戏助手</title>
+    <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-slate-900 text-white p-6">
+    <div id="app" class="max-w-md mx-auto">
+        <h1 class="text-2xl font-bold mb-6 border-b border-slate-700 pb-2">Valorant 战绩记录</h1>
+        
+        <div class="bg-slate-800 p-4 rounded-lg shadow-lg mb-6">
+            <div class="mb-4">
+                <label class="block text-sm mb-1">使用特工</label>
+                <input v-model="newRecord.agent" class="w-full bg-slate-700 p-2 rounded border border-slate-600 focus:outline-none focus:border-blue-500">
+            </div>
+            <div class="grid grid-cols-2 gap-4 mb-4">
+                <div>
+                    <label class="block text-sm mb-1">击杀 (K)</label>
+                    <input v-model.number="newRecord.kills" type="number" class="w-full bg-slate-700 p-2 rounded border border-slate-600">
+                </div>
+                <div>
+                    <label class="block text-sm mb-1">死亡 (D)</label>
+                    <input v-model.number="newRecord.deaths" type="number" class="w-full bg-slate-700 p-2 rounded border border-slate-600">
+                </div>
+            </div>
+            <button @click="addRecord" class="w-full bg-blue-600 hover:bg-blue-500 py-2 rounded font-bold transition">保存本局记录</button>
+        </div>
+
+        <h2 class="text-lg font-semibold mb-3">最近场次</h2>
+        <div v-for="(item, index) in history" :key="index" class="bg-slate-800 p-3 rounded mb-2 border-l-4" :class="item.kills >= item.deaths ? 'border-green-500' : 'border-red-500'">
+            <div class="flex justify-between items-center">
+                <span>{{ item.agent }}</span>
+                <span class="text-sm text-slate-400">{{ item.kills }} / {{ item.deaths }} / {{ item.assists }}</span>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const { createApp, ref } = Vue
+        createApp({
+            setup() {
+                const newRecord = ref({ agent: '', kills: 0, deaths: 0, assists: 0 })
+                const history = ref([])
+
+                const addRecord = () => {
+                    history.value.unshift({ ...newRecord.value })
+                    // 清空表单
+                    newRecord.value = { agent: '', kills: 0, deaths: 0, assists: 0 }
+                }
+
+                return { newRecord, history, addRecord }
+            }
+        }).mount('#app')
+    </script>
+</body>
+</html>
