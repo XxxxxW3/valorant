@@ -3,55 +3,133 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>我的游戏助手</title>
+    <title>无畏助手 - 战绩记录</title>
     <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
     <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/@supabase/supabase-js@2"></script>
 </head>
-<body class="bg-slate-900 text-white p-6">
+<body class="bg-slate-900 text-white p-4">
     <div id="app" class="max-w-md mx-auto">
-        <h1 class="text-2xl font-bold mb-6 border-b border-slate-700 pb-2">Valorant 战绩记录</h1>
+        <h1 class="text-2xl font-bold mb-6 border-b border-slate-700 pb-2 flex items-center">
+            <span class="mr-2">🎮</span> 《无畏无畏》助手
+        </h1>
         
-        <div class="bg-slate-800 p-4 rounded-lg shadow-lg mb-6">
+        <div class="bg-slate-800 p-4 rounded-xl shadow-2xl mb-6 border border-slate-700">
             <div class="mb-4">
-                <label class="block text-sm mb-1">使用特工</label>
-                <input v-model="newRecord.agent" class="w-full bg-slate-700 p-2 rounded border border-slate-600 focus:outline-none focus:border-blue-500">
+                <label class="block text-sm font-medium mb-1 text-slate-400">使用特工</label>
+                <input v-model="newRecord.agent" placeholder="例如: 捷风 / Jett" 
+                       class="w-full bg-slate-700 p-2.5 rounded-lg border border-slate-600 focus:outline-none focus:border-blue-500 transition">
             </div>
             <div class="grid grid-cols-2 gap-4 mb-4">
                 <div>
-                    <label class="block text-sm mb-1">击杀 (K)</label>
-                    <input v-model.number="newRecord.kills" type="number" class="w-full bg-slate-700 p-2 rounded border border-slate-600">
+                    <label class="block text-sm font-medium mb-1 text-slate-400">击杀 (K)</label>
+                    <input v-model.number="newRecord.kills" type="number" 
+                           class="w-full bg-slate-700 p-2.5 rounded-lg border border-slate-600 focus:outline-none focus:border-blue-500">
                 </div>
                 <div>
-                    <label class="block text-sm mb-1">死亡 (D)</label>
-                    <input v-model.number="newRecord.deaths" type="number" class="w-full bg-slate-700 p-2 rounded border border-slate-600">
+                    <label class="block text-sm font-medium mb-1 text-slate-400">死亡 (D)</label>
+                    <input v-model.number="newRecord.deaths" type="number" 
+                           class="w-full bg-slate-700 p-2.5 rounded-lg border border-slate-600 focus:outline-none focus:border-blue-500">
                 </div>
             </div>
-            <button @click="addRecord" class="w-full bg-blue-600 hover:bg-blue-500 py-2 rounded font-bold transition">保存本局记录</button>
+            <button @click="addRecord" :disabled="loading"
+                    class="w-full bg-blue-600 hover:bg-blue-500 disabled:bg-slate-600 py-3 rounded-lg font-bold transition shadow-lg active:transform active:scale-95">
+                {{ loading ? '同步中...' : '保存本局战绩' }}
+            </button>
         </div>
 
-        <h2 class="text-lg font-semibold mb-3">最近场次</h2>
-        <div v-for="(item, index) in history" :key="index" class="bg-slate-800 p-3 rounded mb-2 border-l-4" :class="item.kills >= item.deaths ? 'border-green-500' : 'border-red-500'">
+        <div class="flex justify-between items-center mb-4">
+            <h2 class="text-lg font-semibold text-slate-300">历史战绩预览</h2>
+            <span class="text-xs text-slate-500">数据已存储至云端</span>
+        </div>
+
+        <div v-if="history.length === 0" class="text-center py-10 text-slate-500 bg-slate-800/50 rounded-lg border border-dashed border-slate-700">
+            暂无战绩，打一局记录一下吧！
+        </div>
+
+        <div v-for="(item, index) in history" :key="index" 
+             class="bg-slate-800 p-4 rounded-lg mb-3 border-l-4 transition hover:bg-slate-750"
+             :class="item.kills >= item.deaths ? 'border-green-500' : 'border-red-500'">
             <div class="flex justify-between items-center">
-                <span>{{ item.agent }}</span>
-                <span class="text-sm text-slate-400">{{ item.kills }} / {{ item.deaths }} / {{ item.assists }}</span>
+                <div>
+                    <span class="font-bold text-lg">{{ item.agent || '未知特工' }}</span>
+                    <div class="text-xs text-slate-400 mt-1">{{ formatDate(item.created_at) }}</div>
+                </div>
+                <div class="text-right">
+                    <div class="text-xl font-mono font-bold" :class="item.kills >= item.deaths ? 'text-green-400' : 'text-red-400'">
+                        {{ item.kills }} <span class="text-slate-500 text-sm">/</span> {{ item.deaths }}
+                    </div>
+                    <div class="text-xs text-slate-500 uppercase">K / D Ratio</div>
+                </div>
             </div>
         </div>
     </div>
 
     <script>
-        const { createApp, ref } = Vue
+        const { createApp, ref, onMounted } = Vue
+
+        // --- 运维配置区：已填入你的 Supabase 参数 ---
+        const SUPABASE_URL = 'https://apskvttqoaajflxywla.supabase.co'
+        const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFwc2t2dHRxb2FhamZseHl3bGEiLCJyb2xlIjoiYW5vbiIsImlhdCI6MTc0MTc2MjI0NSwiZXhwIjoyMDU3MzM4MjQ1fQ.H_O5G--nLh8-mF96Gz8yMByEPrv95X_Xl-mF95-l_2o'
+        const _supabase = supabase.createClient(SUPABASE_URL, SUPABASE_KEY)
+
         createApp({
             setup() {
-                const newRecord = ref({ agent: '', kills: 0, deaths: 0, assists: 0 })
+                const newRecord = ref({ agent: '', kills: 0, deaths: 0 })
                 const history = ref([])
+                const loading = ref(false)
 
-                const addRecord = () => {
-                    history.value.unshift({ ...newRecord.value })
-                    // 清空表单
-                    newRecord.value = { agent: '', kills: 0, deaths: 0, assists: 0 }
+                // 从 Supabase 读取数据
+                const fetchRecords = async () => {
+                    const { data, error } = await _supabase
+                        .from('records')
+                        .select('*')
+                        .order('created_at', { ascending: false })
+                    
+                    if (error) {
+                        console.error('读取失败:', error.message)
+                    } else {
+                        history.value = data
+                    }
                 }
 
-                return { newRecord, history, addRecord }
+                // 保存数据到 Supabase
+                const addRecord = async () => {
+                    if (!newRecord.value.agent) {
+                        alert('请输入特工名称')
+                        return
+                    }
+                    
+                    loading.value = true
+                    const { error } = await _supabase
+                        .from('records')
+                        .insert([{
+                            agent: newRecord.value.agent,
+                            kills: newRecord.value.kills,
+                            deaths: newRecord.value.deaths
+                        }])
+                    
+                    if (error) {
+                        alert('保存失败，请检查 Supabase 表结构是否正确: ' + error.message)
+                    } else {
+                        await fetchRecords() // 刷新列表
+                        // 重置输入框
+                        newRecord.value = { agent: '', kills: 0, deaths: 0 }
+                    }
+                    loading.value = false
+                }
+
+                // 简单的日期格式化
+                const formatDate = (dateStr) => {
+                    if (!dateStr) return ''
+                    const date = new Date(dateStr)
+                    return date.toLocaleString('zh-CN', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' })
+                }
+
+                // 页面加载完成后执行
+                onMounted(fetchRecords)
+
+                return { newRecord, history, addRecord, loading, formatDate }
             }
         }).mount('#app')
     </script>
